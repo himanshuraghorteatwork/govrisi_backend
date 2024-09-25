@@ -6,7 +6,7 @@ dotenv.config();
 
 app.get("/",(req,res)=>{
 
-    res.send("Hii from GOVRISI");
+    res.send("Hii from GOVRIfghSI");
 
 });
 
