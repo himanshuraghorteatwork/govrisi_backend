@@ -10,7 +10,6 @@ app.get("/",(req,res)=>{
 
 });
 
-app.get("/")
 
 app.listen(process.env.PORT,()=>{
 
