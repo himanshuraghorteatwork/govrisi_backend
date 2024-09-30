@@ -6,7 +6,7 @@ dotenv.config();
 
 app.get("/",(req,res)=>{
 
-    res.send("heyy new repo");
+    res.send("hey this old repo");
 
 });
 
