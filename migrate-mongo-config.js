@@ -6,7 +6,7 @@ export default {
     // Use the environment variable for the MongoDB connection string
     url: process.env.MONGO_URI,
     
-    databaseName: 'gtest',  // Name of your MongoDB database
+    databaseName: 'research',  // Name of your MongoDB database
     
     options: {
       useNewUrlParser: true,
