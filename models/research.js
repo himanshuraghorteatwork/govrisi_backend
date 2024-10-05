@@ -14,7 +14,6 @@ const projectSchema = new mongoose.Schema({
     status: { type: String,required: true },
     start: { type: Date, required: true },
     end: { type: Date,required: true },
-    file: { type: String ,required: true},
     username:{type:String,required: true,unique:true},
     password:{type:String,required: true},
     email:{type:String,required: true,unique:true},
