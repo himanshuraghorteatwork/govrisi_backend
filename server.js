@@ -1,15 +1,21 @@
 import express from "express";
 import dotenv from "dotenv";
+import cors from 'cors';
+
+import researchRegistration from "./routes/researchRegistration.js";
 
 const app=express();
-dotenv.config();
+dotenv.config();app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(researchRegistration);
 
 app.get("/",(req,res)=>{
 
-    res.send("hey this old repo");
+    
 
 });
-
 
 app.listen(process.env.PORT,()=>{
 
