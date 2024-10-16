@@ -3,13 +3,15 @@ import dotenv from "dotenv";
 import multer from "multer";
 import mongoose from "mongoose";
 import { GridFSBucket } from "mongodb";
+import bcrypt from "bcrypt";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
 import { researchProjectSchema, researchUserSchema } from "../models/research.js";
 
 const app = express();
 dotenv.config();
 
-const registrationRouter = express.Router();
-const openPDF=express.Router();
+const researchRouter = express.Router();
 
 var gfsBucket;
 
@@ -33,8 +35,37 @@ const connectDB = async () => {
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+passport.use(
+  new LocalStrategy(async (username, password, done) => {
+    try {
+      const user = await researchProjectSchema.findOne({ username });
+      if (!user) return done(null, false, { message: "User not found" });
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) return done(null, false, { message: "Incorrect password" });
+
+      return done(null, user);
+    } catch (error) {
+      return done(error);
+    }
+  })
+);
+
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await researchUserSchema.findById(id);
+    done(null, user);
+  } catch (error) {
+    done(error);
+  }
+});
+
 // Middleware to handle JSON data along with file uploads
-registrationRouter.post(
+researchRouter.post(
   "/research/registration",
   upload.single("projectFile"), // Handle single file upload under "projectFile"
   async (req, res) => {
@@ -52,19 +83,14 @@ registrationRouter.post(
           message: 'Username or email already exists. Please use a different one.',
         });
       }
-      // Create the project document
-      const projectDocument = await researchProjectSchema.create({
-        title,
-        institution,
-        description,
-        status,
-        start: startDate,
-        end: endDate,
-        username,
-        password,
-        email,
-      });
 
+      const hashedPassword = await bcrypt.hash(password, 10); // Hash password
+      const projectDocument = await researchProjectSchema.create({
+        title, institution, description, status,
+        start: startDate, end: endDate,
+        username, password: hashedPassword, email,
+      });
+      // Create the project document
       const researchers = JSON.parse(req.body.researchers); // Parse the researchers array
       const researcherIds = [];
 
@@ -118,7 +144,24 @@ registrationRouter.post(
   }
 );
 
-openPDF.get("/open/file", async (req, res) => {
+researchRouter.post("/research/login", (req, res, next) => {
+  passport.authenticate("local", (err, user, info) => {
+    if (err) return next(err); // Handle error during authentication
+
+    if (!user) {
+      return res.status(401).json({ message: info.message || "Invalid credentials" });
+    }
+
+    req.logIn(user, (err) => {
+      if (err) return next(err);
+      res.status(200).json({ message: "Login successful", user: user.username });
+    });
+  })(req, res, next);
+});
+
+// Logout Rout
+
+researchRouter.get("/open/file", async (req, res) => {
   try {
     
     var d=await researchProjectSchema.findOne({title:"GOVRISI"});
@@ -139,4 +182,6 @@ openPDF.get("/open/file", async (req, res) => {
   }
 });
 
-export {registrationRouter,openPDF};
+
+
+export default researchRouter;
