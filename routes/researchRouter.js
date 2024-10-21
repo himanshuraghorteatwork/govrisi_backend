@@ -3,12 +3,12 @@ import dotenv from "dotenv";
 import multer from "multer";
 import mongoose from "mongoose";
 import { GridFSBucket } from "mongodb";
+import { ObjectId } from 'mongodb';
 import bcrypt from "bcrypt";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { researchProjectSchema, researchUserSchema } from "../models/research.js";
 
-const app = express();
 dotenv.config();
 
 const researchRouter = express.Router();
@@ -57,12 +57,28 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser(async (id, done) => {
   try {
-    const user = await researchUserSchema.findById(id);
+    const user = await researchProjectSchema.findById(id);
     done(null, user);
   } catch (error) {
     done(error);
   }
 });
+
+// Route to check user session status
+researchRouter.get('/auth/check-session', (req, res) => {
+  if (req.isAuthenticated()) {
+    res.status(200).json({ message: 'Authenticated' });
+  } else {
+    res.status(401).json({ message: 'Not authenticated' });
+  }
+});
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next(); // User is authenticated, proceed
+  }
+  res.status(401).json({ message: "Unauthorized. Please log in." });
+};
 
 // Middleware to handle JSON data along with file uploads
 researchRouter.post(
@@ -112,11 +128,10 @@ researchRouter.post(
         { $set: { researchers: researcherIds } }
       );
 
-      // Handle file upload using GridFS
+      // Handle file upload using GridFSss
 
 
       const { originalname, buffer } = req.file;
-
       const uploadStream = gfsBucket.openUploadStream(originalname);
       uploadStream.end(buffer);
 
@@ -159,16 +174,170 @@ researchRouter.post("/research/login", (req, res, next) => {
   })(req, res, next);
 });
 
+researchRouter.get("/research/profile", ensureAuthenticated, async (req, res) => {
+  try {
+    // Send user object (populated by passport.deserializeUser)
+    var researchersIds=req.user.researchers;
+    const researchersP=[];
+
+    for(var id of researchersIds)
+    {
+
+      var d=await researchUserSchema.findById(id);
+      researchersP.push(d);
+
+    }
+
+    res.status(200).json({
+      success: true,
+      user: req.user,
+      researchers:researchersP // req.user contains the user info after deserialization
+    });
+  } catch (error) {
+    console.error("Profile retrieval error:", error);
+    res.status(500).json({ message: "Failed to retrieve profile data" });
+  }
+});
+
+researchRouter.post(
+  "/research/update",
+  ensureAuthenticated,
+  upload.single("newFile"), // Handle new file upload
+  async (req, res) => {
+    try {
+      const { username, password, status } = req.body;
+
+      // Authenticate the user
+      const user = await researchProjectSchema.findOne({ username });
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+
+      // Update the project status in the database
+      user.status = status;
+
+      // Handle new file upload and delete old file if present
+      if (req.file) {
+        const { originalname, buffer } = req.file;
+
+        // Delete the old file from GridFS, if it exists
+        if (user.fileId) {
+          console.log(user.fileId);
+          const fileId = new ObjectId(user.fileId); // Ensure ID is an ObjectId
+          const fileCursor = await gfsBucket.find({ _id: fileId }).toArray();
+          
+          if (fileCursor.length > 0) {
+            try {
+              await gfsBucket.delete(fileId);
+              console.log("Old file deleted successfully.");
+            } catch (error) {
+              console.error("Error deleting old file:", error);
+              return res.status(500).json({ message: "Error deleting old file" });
+            }
+          } else {
+            console.warn("No file found with the provided ID. Skipping deletion.");
+          }
+        }
+
+        // Upload the new file to GridFS
+        const uploadStream = gfsBucket.openUploadStream(originalname);
+        uploadStream.end(buffer);
+
+        uploadStream.on("finish", async () => {
+          // Update the fileId with the new file ID in the database
+          user.fileId = uploadStream.id;
+          await user.save(); // Save the updated user data
+
+          res.status(200).json({
+            message: "Project updated successfully with new file",
+            fileId: uploadStream.id,
+          });
+        });
+
+        uploadStream.on("error", (err) => {
+          console.error("File upload error:", err);
+          res.status(500).json({ error: "Error uploading new file" });
+        });
+      } else {
+        // If no new file is uploaded, just save the status update
+        await user.save();
+        res.status(200).json({ message: "Project status updated successfully" });
+      }
+    } catch (error) {
+      console.error("Update error:", error);
+      res.status(500).json({ error: "Error in updating project" });
+    }
+  }
+);
+
+researchRouter.get('/research/search', async (req, res) => {
+  try {
+    const { query } = req.query; // Get query from query parameters
+    // Check if query is a valid string
+    if (typeof query !== 'string' || query.trim() === '') {
+      return res.status(400).json({ message: 'Invalid query parameter' }); // Return an error for invalid input
+    }
+
+    // Find documents matching the query (case-insensitive)
+    const results = await researchProjectSchema.find({
+      title: { $regex: new RegExp(query, 'i') } // Create a regex object for case-insensitive search
+    });
+
+    // Return the results to the frontend
+    res.json(results);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+researchRouter.get('/research/projectDetail/:id', async (req, res) => {
+  try {
+    const { id } = req.params; // Get ID from URL parameters
+    const project = await researchProjectSchema.findById(id); // Find project by ID
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' }); // Handle case where project is not found
+    }
+
+    var researchersIds=project.researchers;
+    const researchersP=[];
+
+    for(var rid of researchersIds)
+    {
+
+      var d=await researchUserSchema.findById(rid);
+      researchersP.push(d);
+
+    }
+
+    res.json({ project, researchers: researchersP });
+    // Return project data to frontend
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+
+researchRouter.post('/research/logout', (req, res) => {
+  req.session.destroy(err => {
+      if (err) {
+          return res.status(500).json({ message: 'Logout failed', error: err });
+      }
+      res.clearCookie('connect.sid'); // Clear the cookie
+      return res.status(200).json({ message: 'Logout successful' });
+  });
+});
+
 // Logout Rout
 
-researchRouter.get("/open/file", async (req, res) => {
+researchRouter.get("/open/file/:fileId", async (req, res) => {
   try {
-    
-    var d=await researchProjectSchema.findOne({title:"GOVRISI"});
-
-    // Find the file by its ID and stream it to the response
-    const fileId = new mongoose.Types.ObjectId(d.fileId);
-    const downloadStream = gfsBucket.openDownloadStream(fileId);
+    const { fileId } = req.params; // Get file ID from route parameters
+    console.log(fileId);
+    const downloadStream = gfsBucket.openDownloadStream(new mongoose.Types.ObjectId(fileId));
 
     res.set({
       "Content-Type": "application/pdf",
@@ -177,11 +346,8 @@ researchRouter.get("/open/file", async (req, res) => {
 
     downloadStream.pipe(res); // Stream the file directly to the response
   } catch (error) {
-    console.error("Error retrieving file:", error);
-    res.status(500).json({ error: "Failed to retrieve file" });
+    console.error('Error retrieving file:', error);
+    res.status(500).json({ error: 'Failed to retrieve file' });
   }
 });
-
-
-
 export default researchRouter;
