@@ -223,14 +223,13 @@ researchRouter.post(
 
         // Delete the old file from GridFS, if it exists
         if (user.fileId) {
-          console.log(user.fileId);
+
           const fileId = new ObjectId(user.fileId); // Ensure ID is an ObjectId
           const fileCursor = await gfsBucket.find({ _id: fileId }).toArray();
           
           if (fileCursor.length > 0) {
             try {
               await gfsBucket.delete(fileId);
-              console.log("Old file deleted successfully.");
             } catch (error) {
               console.error("Error deleting old file:", error);
               return res.status(500).json({ message: "Error deleting old file" });
@@ -320,6 +319,18 @@ researchRouter.get('/research/projectDetail/:id', async (req, res) => {
   }
 });
 
+researchRouter.get('/research/latest', async (req, res) => {
+  try {
+    const projects = await researchProjectSchema.find()
+      .sort({ createdAt: -1 }) // Sort by createdAt in descending order
+      .limit(10); // Limit to 10 projects
+
+    res.json(projects); // Send the projects as a JSON response
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching projects', error });
+  }
+});
+
 
 researchRouter.post('/research/logout', (req, res) => {
   req.session.destroy(err => {
@@ -336,7 +347,6 @@ researchRouter.post('/research/logout', (req, res) => {
 researchRouter.get("/open/file/:fileId", async (req, res) => {
   try {
     const { fileId } = req.params; // Get file ID from route parameters
-    console.log(fileId);
     const downloadStream = gfsBucket.openDownloadStream(new mongoose.Types.ObjectId(fileId));
 
     res.set({
