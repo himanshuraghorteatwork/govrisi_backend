@@ -4,7 +4,8 @@ import session from "express-session";
 import passport from "passport";
 import cors from "cors";
 
-import researchRouter from "./routes/researchRouter.js"; // Adjust the path if needed
+import researchRouter from "./routes/researchRouter.js";
+import iprRouter from "./routes/iprRouter.js"; 
 
 const app = express();
 dotenv.config();
@@ -13,7 +14,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
-    origin: "http://localhost:3000",
+    origin: process.env.CORS_ORIGIN,
     credentials: true,
   }));
   
@@ -35,6 +36,8 @@ app.use(passport.session()); // Enables persistent login sessions
 
 // Register your routers
 app.use(researchRouter);
+app.use(iprRouter);
+
 
 // Start the server
 app.listen(process.env.PORT, () => {
