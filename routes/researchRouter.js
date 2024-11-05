@@ -7,7 +7,7 @@ import { ObjectId } from 'mongodb';
 import bcrypt from "bcrypt";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { researchProjectSchema, researchUserSchema } from "../models/research.js";
+import { researchProjectSchema, researchUserSchema } from "../models/projectModel.js";
 
 dotenv.config();
 
@@ -17,7 +17,7 @@ var gfsBucket;
 
 const connectDB = async () => {
     try {
-      await mongoose.connect(process.env.MONGO_URI_1 , {
+      await mongoose.connect(process.env.MONGO_URI , {
         useNewUrlParser: true,
         useUnifiedTopology: true,
       });
@@ -75,7 +75,7 @@ researchRouter.get('/auth/check-session', (req, res) => {
 
 function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
-    return next(); // User is authenticated, proceed
+    return next();
   }
   res.status(401).json({ message: "Unauthorized. Please log in." });
 };
@@ -83,10 +83,10 @@ function ensureAuthenticated(req, res, next) {
 // Middleware to handle JSON data along with file uploads
 researchRouter.post(
   "/research/registration",
-  upload.single("projectFile"), // Handle single file upload under "projectFile"
+  upload.single("projectFile"), 
   async (req, res) => {
     try {
-      // Parse the JSON formData string from the request body
+      
       const formData = JSON.parse(req.body.formData);
       const { title, institution, email, status, startDate, endDate, username, password,description } = formData;
 
@@ -106,11 +106,11 @@ researchRouter.post(
         start: startDate, end: endDate,
         username, password: hashedPassword, email,
       });
-      // Create the project document
-      const researchers = JSON.parse(req.body.researchers); // Parse the researchers array
+      
+      const researchers = JSON.parse(req.body.researchers); 
       const researcherIds = [];
 
-      // Loop through and create each researcher document
+      
       for (const user of researchers) {
         const researcherDocument = await researchUserSchema.create({
           name: user.name,
@@ -122,7 +122,7 @@ researchRouter.post(
         researcherIds.push(researcherDocument._id);
       }
 
-      // Update the project with researcher IDs
+      
       await researchProjectSchema.findByIdAndUpdate(
         projectDocument._id,
         { $set: { researchers: researcherIds } }
@@ -136,7 +136,6 @@ researchRouter.post(
       uploadStream.end(buffer);
 
       uploadStream.on("finish", async () => {
-        // Save the file ID to the project document
         await researchProjectSchema.findByIdAndUpdate(
           projectDocument._id,
           { $set: { fileId: uploadStream.id } }

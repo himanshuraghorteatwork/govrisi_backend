@@ -1,13 +1,12 @@
-// ResearchModel1.js
 import mongoose from 'mongoose';
 import connectDB from '../db/dbConnection.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-await connectDB(process.env.MONGO_URI_1);
+await connectDB(process.env.MONGO_URI);
 
-// Connect to the first database
+
 const projectSchema = new mongoose.Schema({
     title: { type: String, required: true },
     institution: { type: String, required: true },
@@ -36,5 +35,26 @@ const researcherSchema=new mongoose.Schema({
 
 const researchUserSchema = mongoose.model('researcher', researcherSchema);
 
-export {researchProjectSchema,researchUserSchema};
+const iprSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    applicantName: { type: String, required: true },
+    description: { type: String, required: true },
+    status: { type: String, required: true },
+    applicationNumber: { type: String, required: true, unique: true },
+    applicationDate: { type: Date, required: true },
+    publicationDate: { type: Date, required: true },
+    email: { type: String, required: true },
+    certificateFileId: { type: String },
+    inventionFileId: { type: String },
+    inventors: [
+        {
+          name: { type: String, required: true },
+          email: { type: String, required: true }
+        }
+      ]
+}, { timestamps: true });
+
+const ipr = mongoose.model('ipr', iprSchema);
+
+export {researchProjectSchema,researchUserSchema,ipr};
 
